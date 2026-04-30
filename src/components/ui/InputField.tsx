@@ -4,11 +4,12 @@ import React from "react";
 
 interface InputFieldProps {
   label?: string;
-  name: string; // Tambahan untuk mempermudah handle state
+  name: string;
   placeholder: string;
   type?: string;
   large?: boolean;
   value?: string | number;
+  required?: boolean; // 1. Tambahkan prop required di sini (opsional)
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => void;
@@ -21,6 +22,7 @@ export default function InputField({
   type = "text",
   large = false,
   value,
+  required = false, // 2. Beri nilai default false agar aman jika tidak diisi
   onChange,
 }: InputFieldProps) {
   const baseClassName =
@@ -32,12 +34,19 @@ export default function InputField({
   if (large) {
     return (
       <div className="mb-4">
-        {label && <label className={labelClassName}>{label}</label>}
+        {label && (
+          <label className={labelClassName}>
+            {label}
+            {/* Memunculkan bintang merah jika required */}
+            {required && <span className="text-red-500 ml-1">*</span>}
+          </label>
+        )}
         <textarea
           name={name}
           placeholder={placeholder}
           onChange={onChange}
           value={value}
+          required={required} // 3. Pasang atribut ke elemen HTML
           className={`${baseClassName} h-32 resize-y`}
         />
       </div>
@@ -46,13 +55,20 @@ export default function InputField({
 
   return (
     <div className="mb-4">
-      {label && <label className={labelClassName}>{label}</label>}
+      {label && (
+        <label className={labelClassName}>
+          {label}
+          {/* Memunculkan bintang merah jika required */}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+      )}
       <input
         type={type}
         name={name}
         placeholder={placeholder}
         onChange={onChange}
         value={value}
+        required={required} // 3. Pasang atribut ke elemen HTML
         className={baseClassName}
       />
     </div>

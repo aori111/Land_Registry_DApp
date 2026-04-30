@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "anvil": "anvil --load-state state.json"
+    "anvil": "anvil --load-state state.json",
+    "chain:seed-land": "cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 \"submitRegistration(string,string,string,uint256,string)\" \"10.15.22.05.1.00001\" \"Aldo Rivaldi\" \"Kota Pontianak, Kalimantan Barat\" 150 \"QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco\" --rpc-url http://127.0.0.1:8545 --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
   },
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@tanstack/react-query": "^5.99.2",
+    "@wagmi/core": "^3.4.4",
     "lucide-react": "^1.8.0",
     "next": "16.2.4",
     "pinata": "^2.5.5",

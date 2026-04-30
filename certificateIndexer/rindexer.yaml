@@ -1,0 +1,31 @@
+name: certificateIndexer
+project_type: no-code
+config: {}
+timestamps: null
+networks:
+  - name: anvil
+    chain_id: 31337
+    rpc: http://localhost:8545
+storage:
+  postgres:
+    enabled: true
+  csv:
+    enabled: true
+    path: "./generated_csv"
+native_transfers:
+  enabled: false
+contracts:
+  - name: LandRegistryMultiSig
+    details:
+      - network: anvil
+        address: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+        start_block: 0
+    abi: ./abis/LandRegistryMultiSig.abi.json
+    include_events:
+      - name: RequestSubmitted
+      - name: RequestConfirmed
+      - name: RequestExecuted
+      - name: CertificateRegistered
+      - name: CertificateTransferred
+global:
+  health_port: 8080
