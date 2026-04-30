@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "anvil": "anvil --load-state state.json",
+    "anvil:deploy": "cd foundry && forge script script/LandRegistryMultiSig.s.sol --broadcast --rpc-url http://127.0.0.1:8545 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
     "chain:seed-land": "cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 \"submitRegistration(string,string,string,uint256,string)\" \"10.15.22.05.1.00001\" \"Aldo Rivaldi\" \"Kota Pontianak, Kalimantan Barat\" 150 \"QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco\" --rpc-url http://127.0.0.1:8545 --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
   },
   "dependencies": {
