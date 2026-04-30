@@ -132,44 +132,13 @@ export const LAND_REGISTRY_ABI = [
   },
   {
     type: "function",
-    name: "getCertificateDetails",
-    inputs: [
-      {
-        name: "_nib",
-        type: "string",
-        internalType: "string",
-      },
-    ],
+    name: "getAuthorities",
+    inputs: [],
     outputs: [
       {
         name: "",
-        type: "string",
-        internalType: "string",
-      },
-      {
-        name: "",
-        type: "string",
-        internalType: "string",
-      },
-      {
-        name: "",
-        type: "string",
-        internalType: "string",
-      },
-      {
-        name: "",
-        type: "uint256",
-        internalType: "uint256",
-      },
-      {
-        name: "",
-        type: "string",
-        internalType: "string",
-      },
-      {
-        name: "",
-        type: "bool",
-        internalType: "bool",
+        type: "address[]",
+        internalType: "address[]",
       },
     ],
     stateMutability: "view",
@@ -179,7 +148,7 @@ export const LAND_REGISTRY_ABI = [
     name: "getRequestConfirmationsCount",
     inputs: [
       {
-        name: "_index",
+        name: "_requestIndex",
         type: "uint256",
         internalType: "uint256",
       },
@@ -233,12 +202,17 @@ export const LAND_REGISTRY_ABI = [
   },
   {
     type: "function",
-    name: "isPendingRegistration",
+    name: "isConfirmed",
     inputs: [
       {
-        name: "",
-        type: "string",
-        internalType: "string",
+        name: "_requestIndex",
+        type: "uint256",
+        internalType: "uint256",
+      },
+      {
+        name: "_auth",
+        type: "address",
+        internalType: "address",
       },
     ],
     outputs: [

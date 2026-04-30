@@ -1,2 +1,0 @@
-contract_address,request_index,action,nib,tx_hash,block_number,block_hash,network,tx_index,log_index
-0x5fbdb2315678afecb367f032d93f642f64180aa3,0,0,10.15.22.05.1.00001,0xcd91a3b78b5ebd02decf0066aef73882ed791a9ac9a1c5a95c419e228615145a,3,0x3fda0b1b760b0e205bc3b89c3bf90afaff65dc88f9b16a46fa36f003d4a98b64,anvil
