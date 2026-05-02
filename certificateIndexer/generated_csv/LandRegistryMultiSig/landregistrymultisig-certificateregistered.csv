@@ -1,2 +1,0 @@
-contract_address,nib,owner_name,tx_hash,block_number,block_hash,network,tx_index,log_index
-0x5fbdb2315678afecb367f032d93f642f64180aa3,10.15.22.05.1.00001,Aldo Rivaldi,0xc335cdcc2bf99f32beac027d032ab84f8cbad353038deb26727f6d6e0d23a1f4,5,0x17ebb316c51310e737d9d6ed62f9376a28fd32e39f521375a43fe17db214b4bd,anvil
