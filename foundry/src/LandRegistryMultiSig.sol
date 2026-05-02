@@ -30,6 +30,7 @@ contract LandRegistryMultiSig {
 
     mapping(string => Certificate) public certificates;
 
+    mapping(string => bool) public isPendingRegistration;
     mapping(string => bool) public isCidUsed;
 
     // ==========================================
@@ -115,6 +116,9 @@ contract LandRegistryMultiSig {
     ) public onlyAuthority {
         require(!certificates[_nib].isRegistered, "NIB sudah terdaftar");
         require(!isCidUsed[_documentHash], "Dokumen (CID) sudah terdaftar");
+        require(!isPendingRegistration[_nib], "NIB sedang dalam proses antrean");
+
+        uint _requestIndex = requests.length;
 
         requests.push(
             Request({
@@ -129,6 +133,9 @@ contract LandRegistryMultiSig {
             })
         );
 
+        confirmRequest(_requestIndex);
+        
+        isPendingRegistration[_nib] = true;
         isCidUsed[_documentHash] = true;
 
         emit RequestSubmitted(requests.length - 1, ActionType.Register, _nib);
@@ -139,6 +146,9 @@ contract LandRegistryMultiSig {
         string memory _newOwnerName
     ) public onlyAuthority {
         require(certificates[_nib].isRegistered, "Sertifikat tidak ditemukan");
+        require(!isPendingRegistration[_nib], "NIB sedang dalam proses antrean");
+
+        uint _requestIndex = requests.length;
 
         requests.push(
             Request({
@@ -152,6 +162,10 @@ contract LandRegistryMultiSig {
                 confirmationsCount: 0
             })
         );
+
+        confirmRequest(_requestIndex);
+
+        isPendingRegistration[_nib] = true;
 
         emit RequestSubmitted(requests.length - 1, ActionType.Transfer, _nib);
     }
@@ -194,11 +208,13 @@ contract LandRegistryMultiSig {
                 documentHash: req.documentHash,
                 isRegistered: true
             });
+            isPendingRegistration[req.nib] = false;
             emit CertificateRegistered(req.nib, req.newOwnerName);
         } 
         else if (req.action == ActionType.Transfer) {
             string memory oldOwner = certificates[req.nib].ownerName;
             certificates[req.nib].ownerName = req.newOwnerName;
+            isPendingRegistration[req.nib] = false;
             emit CertificateTransferred(req.nib, oldOwner, req.newOwnerName);
         }
 

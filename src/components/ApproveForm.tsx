@@ -112,6 +112,7 @@ export default function ApproveForm({
       }
 
       setStatus("success");
+      refetch();
     } catch (err: any) {
       setStatus("error");
       console.error(err);

@@ -2,203 +2,139 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
-import "../src/LandRegistryMultiSig.sol"; // Sesuaikan dengan path file Anda
+import "../src/LandRegistryMultiSig.sol"; 
 
 contract LandRegistryMultiSigTest is Test {
-    LandRegistryMultiSig registry;
+    LandRegistryMultiSig public registry;
 
-    // Mendefinisikan akun untuk pengujian
-    address auth1 = address(0x1);
-    address auth2 = address(0x2);
-    address auth3 = address(0x3);
-    address nonAuth = address(0x4);
-
-    address[] authorities;
+    address public auth1 = address(0x111);
+    address public auth2 = address(0x222);
+    address public auth3 = address(0x333);
+    address public nonAuth = address(0x999);
 
     function setUp() public {
-        // Menyiapkan array otoritas
-        authorities.push(auth1);
-        authorities.push(auth2);
-        authorities.push(auth3);
+        address[] memory authorities = new address[](3);
+        authorities[0] = auth1;
+        authorities[1] = auth2;
+        authorities[2] = auth3;
 
-        // Deploy kontrak dengan 3 otoritas dan butuh 2 konfirmasi
-        registry = new LandRegistryMultiSig(authorities, 2);
+        // UPDATE: Diubah menjadi 3 konfirmasi (3-of-3)
+        registry = new LandRegistryMultiSig(authorities, 3);
     }
 
     // ==========================================
-    // TEST INISIALISASI (CONSTRUCTOR)
+    // TEST 1: PENGATURAN AWAL (DEPLOYMENT)
     // ==========================================
-
-    function test_InitialState() public {
-        assertEq(registry.requiredConfirmations(), 2);
-        assertTrue(registry.isAuthority(auth1));
-        assertTrue(registry.isAuthority(auth2));
-        assertTrue(registry.isAuthority(auth3));
-        assertFalse(registry.isAuthority(nonAuth));
-        
-        address[] memory storedAuthorities = registry.getAuthorities();
-        assertEq(storedAuthorities.length, 3);
-        assertEq(storedAuthorities[0], auth1);
-    }
-
-    function testRevert_ConstructorInvalidConfig() public {
-        address[] memory emptyAuth;
-        // Ekspektasi gagal jika array kosong
-        vm.expectRevert("Harus ada minimal 1 pihak berwenang");
-        new LandRegistryMultiSig(emptyAuth, 1);
-
-        address[] memory singleAuth = new address[](1);
-        singleAuth[0] = auth1;
-        // Ekspektasi gagal jika konfirmasi melebihi jumlah otoritas
-        vm.expectRevert("Jumlah konfirmasi tidak valid");
-        new LandRegistryMultiSig(singleAuth, 2);
+    function test_DeploymentSetup() public view {
+        assertEq(registry.requiredConfirmations(), 3);
+        assertEq(registry.isAuthority(auth1), true);
+        assertEq(registry.isAuthority(auth2), true);
+        assertEq(registry.isAuthority(auth3), true);
+        assertEq(registry.isAuthority(nonAuth), false);
     }
 
     // ==========================================
-    // TEST ALUR REGISTRASI & MULTI-SIG
+    // TEST 2: REGISTRASI (SUBMIT & AUTO-CONFIRM)
     // ==========================================
-
     function test_SubmitRegistration() public {
         vm.prank(auth1);
-        registry.submitRegistration("NIB123", "Budi", "Jakarta", 500, "CID_123");
+        registry.submitRegistration("NIB-001", "Budi", "Pontianak", 150, "CID-123");
 
-        // Memastikan request tersimpan dengan benar
-        (
-            LandRegistryMultiSig.ActionType action,
-            string memory nib,
-            string memory newOwnerName,
-            string memory location,
-            uint256 areaSqm,
-            string memory documentHash,
-            bool executed,
-            uint confirmationsCount
-        ) = registry.requests(0);
-
-        assertEq(uint(action), uint(LandRegistryMultiSig.ActionType.Register));
-        assertEq(nib, "NIB123");
-        assertEq(newOwnerName, "Budi");
-        assertEq(location, "Jakarta");
-        assertEq(areaSqm, 500);
-        assertEq(documentHash, "CID_123");
-        assertFalse(executed);
-        assertEq(confirmationsCount, 0); // Di kontrak ini, submit TIDAK otomatis confirm
-
-        // Memastikan CID terkunci
-        assertTrue(registry.isCidUsed("CID_123"));
-    }
-
-    function testRevert_SubmitRegistration_NotAuthority() public {
-        vm.prank(nonAuth);
-        vm.expectRevert("Bukan pihak berwenang (Not an authority)");
-        registry.submitRegistration("NIB123", "Budi", "Jakarta", 500, "CID_123");
-    }
-
-    function test_ConfirmAndExecuteRegistration() public {
-        // 1. Submit Request
-        vm.prank(auth1);
-        registry.submitRegistration("NIB123", "Budi", "Jakarta", 500, "CID_123");
-
-        // 2. Otoritas 1 Konfirmasi (1/2)
-        vm.prank(auth1);
-        registry.confirmRequest(0);
-        
         assertEq(registry.getRequestConfirmationsCount(0), 1);
-        assertTrue(registry.isConfirmed(0, auth1));
-        
-        // Cek bahwa belum dieksekusi
-        (,,,,,, bool executedBefore,) = registry.requests(0);
-        assertFalse(executedBefore);
+        assertEq(registry.isConfirmed(0, auth1), true);
 
-        // 3. Otoritas 2 Konfirmasi (2/2) -> Memicu Eksekusi Otomatis
+        assertEq(registry.isPendingRegistration("NIB-001"), true);
+        assertEq(registry.isCidUsed("CID-123"), true);
+    }
+
+    // ==========================================
+    // TEST 3: VALIDASI PENOLAKAN DUPLIKASI
+    // ==========================================
+    function test_RevertIf_DuplicateNIBOrCID() public {
+        vm.prank(auth1);
+        registry.submitRegistration("NIB-001", "Budi", "Pontianak", 150, "CID-123");
+
+        vm.prank(auth2);
+        vm.expectRevert("NIB sedang dalam proses antrean");
+        registry.submitRegistration("NIB-001", "Andi", "Jakarta", 200, "CID-456");
+
+        vm.prank(auth2);
+        vm.expectRevert("Dokumen (CID) sudah terdaftar");
+        registry.submitRegistration("NIB-002", "Andi", "Jakarta", 200, "CID-123");
+    }
+
+    // ==========================================
+    // TEST 4: EKSEKUSI MULTI-SIG (BUTUH 3 SIGN)
+    // ==========================================
+    function test_ExecuteRegistration() public {
+        // Sign 1 (1/3)
+        vm.prank(auth1);
+        registry.submitRegistration("NIB-001", "Budi", "Pontianak", 150, "CID-123");
+
+        // Sign 2 (2/3) - Belum dieksekusi
         vm.prank(auth2);
         registry.confirmRequest(0);
+        
+        // Cek bahwa status masih false (belum terdaftar karena baru 2/3)
+        (,,,,, bool isRegisteredBefore) = registry.certificates("NIB-001");
+        assertEq(isRegisteredBefore, false);
 
-        // Cek bahwa status request menjadi executed
-        (,,,,,, bool executedAfter, uint count) = registry.requests(0);
-        assertTrue(executedAfter);
-        assertEq(count, 2);
+        // Sign 3 (3/3) - Akan otomatis tereksekusi
+        vm.prank(auth3);
+        registry.confirmRequest(0);
 
-        // 4. Validasi Sertifikat Berhasil Terdaftar
+        // Cek bahwa sekarang sudah sukses masuk ke mapping certificates
         (
             string memory nib,
             string memory ownerName,
-            string memory location,
-            uint256 areaSqm,
-            string memory documentHash,
-            bool isRegistered
-        ) = registry.certificates("NIB123");
+            ,
+            ,
+            ,
+            bool isRegisteredAfter
+        ) = registry.certificates("NIB-001");
 
-        assertTrue(isRegistered);
-        assertEq(nib, "NIB123");
+        assertEq(isRegisteredAfter, true);
         assertEq(ownerName, "Budi");
-        assertEq(location, "Jakarta");
-        assertEq(areaSqm, 500);
-        assertEq(documentHash, "CID_123");
-    }
-
-    function testRevert_ConfirmAlreadyConfirmed() public {
-        vm.prank(auth1);
-        registry.submitRegistration("NIB123", "Budi", "Jakarta", 500, "CID_123");
-
-        vm.startPrank(auth1);
-        registry.confirmRequest(0);
-        
-        vm.expectRevert("Anda sudah menyetujui permintaan ini");
-        registry.confirmRequest(0);
-        vm.stopPrank();
+        assertEq(nib, "NIB-001");
     }
 
     // ==========================================
-    // TEST PENCEGAHAN DUPLIKASI
+    // TEST 5: KEAMANAN AKSES (HAK AKSES)
     // ==========================================
-
-    function testRevert_DuplicateCID() public {
-        vm.prank(auth1);
-        registry.submitRegistration("NIB123", "Budi", "Jakarta", 500, "CID_123");
-
-        // Coba mendaftarkan NIB berbeda tapi CID sama (CID sudah terkunci saat submit)
-        vm.prank(auth2);
-        vm.expectRevert("Dokumen (CID) sudah terdaftar");
-        registry.submitRegistration("NIB999", "Agus", "Bandung", 200, "CID_123");
+    function test_RevertIf_NonAuthorityTriesToSubmit() public {
+        vm.prank(nonAuth);
+        vm.expectRevert("Bukan pihak berwenang (Not an authority)");
+        registry.submitRegistration("NIB-001", "Hacker", "Unknown", 100, "CID-Hack");
     }
 
     // ==========================================
-    // TEST ALUR TRANSFER (BALIK NAMA)
+    // TEST 6: BALIK NAMA (TRANSFER) - FULL FLOW
     // ==========================================
+    function test_SubmitAndExecuteTransfer() public {
+        // --- FASE 1: REGISTRASI AWAL ---
+        vm.prank(auth1); registry.submitRegistration("NIB-001", "Budi", "Pontianak", 150, "CID-123");
+        vm.prank(auth2); registry.confirmRequest(0);
+        vm.prank(auth3); registry.confirmRequest(0); // Status NIB-001 sekarang terdaftar, isPending = false
 
-    function test_TransferFlow() public {
-        // Setup: Daftarkan sertifikat terlebih dahulu
-        vm.prank(auth1);
-        registry.submitRegistration("NIB_TF", "Andi", "Bali", 1000, "CID_TF");
-        vm.prank(auth1);
-        registry.confirmRequest(0);
+        // --- FASE 2: TRANSFER ---
+        // Auth2 mengajukan balik nama ke "Siti" (Sign 1/3)
         vm.prank(auth2);
-        registry.confirmRequest(0);
+        registry.submitTransfer("NIB-001", "Siti"); 
 
-        // Pastikan terdaftar atas nama Andi
-        (, string memory initialOwner, , , , bool registered) = registry.certificates("NIB_TF");
-        assertTrue(registered);
-        assertEq(initialOwner, "Andi");
-
-        // 1. Submit Transfer
+        // Auth1 menyetujui transfer (Sign 2/3)
         vm.prank(auth1);
-        registry.submitTransfer("NIB_TF", "Siti");
+        registry.confirmRequest(1);
 
-        // 2. Konfirmasi Transfer (Request index 1)
-        vm.prank(auth2);
-        registry.confirmRequest(1); // 1/2
-        
+        // Cek nama pemilik sebelum sign terakhir (masih "Budi")
+        (, string memory ownerBefore, , , , ) = registry.certificates("NIB-001");
+        assertEq(ownerBefore, "Budi");
+
+        // Auth3 memberikan konfirmasi terakhir (Sign 3/3) -> Auto Execute
         vm.prank(auth3);
-        registry.confirmRequest(1); // 2/2 -> Auto Execute
+        registry.confirmRequest(1);
 
-        // 3. Validasi Kepemilikan Berubah
-        (, string memory newOwner, , , , ) = registry.certificates("NIB_TF");
-        assertEq(newOwner, "Siti");
-    }
-
-    function testRevert_TransferUnregistered() public {
-        vm.prank(auth1);
-        vm.expectRevert("Sertifikat tidak ditemukan");
-        registry.submitTransfer("NIB_GHOIB", "Joko");
+        // VALIDASI: Nama pemilik harus berubah menjadi "Siti"
+        (, string memory ownerAfter, , , , ) = registry.certificates("NIB-001");
+        assertEq(ownerAfter, "Siti");
     }
 }

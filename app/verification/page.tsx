@@ -122,7 +122,7 @@ export default function VerificationPage() {
                 Pending Signatures
               </h3>
               <span className="bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded text-xs font-bold">
-                4 Items
+                {pendingCertificates.length} Items
               </span>
             </div>
             <p className="text-sm text-gray-500 mb-6">
