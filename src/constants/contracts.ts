@@ -226,6 +226,25 @@ export const LAND_REGISTRY_ABI = [
   },
   {
     type: "function",
+    name: "isPendingRegistration",
+    inputs: [
+      {
+        name: "",
+        type: "string",
+        internalType: "string",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "requests",
     inputs: [
       {
