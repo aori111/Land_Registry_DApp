@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "forge-std/Script.sol";
-import "../src/LandRegistryMultiSig.sol";
+import "../src/LandRegistryMultiSigOZ.sol";
 
 contract DeployLandRegistryMultiSig is Script {
     function run() external {
