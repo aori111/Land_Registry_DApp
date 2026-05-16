@@ -20,7 +20,6 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { form } from "viem/chains";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -37,8 +36,10 @@ export default function AdminDashboard() {
   const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState({
-    nib: "",
+    nibRegister: "",
+    nibTransfer: "",
     ownerName: "",
+    newOwnerName: "",
     location: "",
     areaSqm: "",
   });
@@ -65,7 +66,18 @@ export default function AdminDashboard() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleFormSubmit = async (e: React.FormEvent) => {
+  const clearForm = () => {
+    setFormData({
+      nibRegister: "",
+      nibTransfer: "",
+      ownerName: "",
+      newOwnerName: "",
+      location: "",
+      areaSqm: "",
+    });
+  };
+
+  const handleSubmitRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
@@ -128,7 +140,7 @@ export default function AdminDashboard() {
         address: LAND_REGISTRY_ADDRESS,
         functionName: "submitRegistration",
         args: [
-          formData.nib,
+          formData.nibRegister,
           formData.ownerName,
           formData.location,
           BigInt(Math.floor(Number(formData.areaSqm))),
@@ -172,12 +184,7 @@ export default function AdminDashboard() {
 
         setTimeout(() => {
           // 1. Reset data form
-          setFormData({
-            nib: "",
-            ownerName: "",
-            location: "",
-            areaSqm: "",
-          });
+          clearForm();
 
           // 2. Reset file yang dipilih
           setSelectedFile(null);
@@ -188,9 +195,6 @@ export default function AdminDashboard() {
           setErrorMessage("");
         }, 3000);
       }
-
-      // Redirect setelah sukses
-      // setTimeout(() => router.push("/verification"), 2500);
     } catch (err: any) {
       setStatus("error");
       console.error("Error Detail:", err);
@@ -212,9 +216,110 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleTransferSubmit = async (e: React.FormEvent) => {
+  const handleSubmitTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
+
+    // Validasi form manual sebelum mulai
+    if (!formData.nibTransfer || !formData.newOwnerName) {
+      setStatus("error");
+      setErrorMessage("Mohon lengkapi NIB dan Nama Pemilik Baru.");
+      return;
+    }
+
+    try {
+      // ==========================================
+      // FASE 1: PRE-FLIGHT CHECK (VALIDASI FRONTEND)
+      // ==========================================
+      setStatus("signing");
+
+      // Cek apakah NIB sedang dalam proses antrean untuk mencegah error revert
+      const isPending = await readContract(config, {
+        abi: LAND_REGISTRY_ABI,
+        address: LAND_REGISTRY_ADDRESS,
+        functionName: "isPendingRegistration",
+        args: [formData.nibTransfer],
+      });
+
+      if (isPending) {
+        throw new Error(
+          "NIB ini sedang dalam proses antrean (Pending). Tidak dapat melakukan transfer saat ini.",
+        );
+      }
+
+      // ==========================================
+      // FASE 2: SIGNING (WALLET)
+      // ==========================================
+      const txHash = await writeContractAsync({
+        abi: LAND_REGISTRY_ABI,
+        address: LAND_REGISTRY_ADDRESS,
+        functionName: "submitTransfer",
+        args: [formData.nibTransfer, formData.newOwnerName],
+      });
+
+      console.log("Hasil write contract", txHash);
+
+      // ==========================================
+      // FASE 3: MINING (BLOCKCHAIN CONFIRMATION)
+      // ==========================================
+      setStatus("mining");
+
+      const receipt = await waitForTransactionReceipt(config, {
+        hash: txHash,
+        confirmations: 1,
+      });
+      console.log("Receipt Status", receipt.status);
+
+      if (receipt.status === "reverted") {
+        throw new Error("Transaction Reverted oleh Blockchain.");
+      }
+
+      // ==========================================
+      // FASE 4: SUCCESS
+      // ==========================================
+      if (receipt.status === "success") {
+        setTimeout(async () => {
+          // Refresh data staging/dashboard
+          await queryClient.invalidateQueries({
+            queryKey: ["pending-certificates"],
+          });
+          await queryClient.invalidateQueries({
+            queryKey: ["all-certificates"],
+          });
+        }, 1500);
+
+        setStatus("success");
+        console.log("Permintaan Transfer Berhasil Masuk Staging!");
+
+        setTimeout(() => {
+          // 1. Reset data form
+          clearForm();
+
+          // 2. Kembalikan status ke idle
+          setStatus("idle");
+          setErrorMessage("");
+        }, 3000);
+      }
+    } catch (err: any) {
+      setStatus("error");
+      console.error("Error Detail:", err);
+
+      if (err instanceof BaseError) {
+        const revertError = err.walk(
+          (e) => e instanceof ContractFunctionRevertedError,
+        );
+        if (revertError instanceof ContractFunctionRevertedError) {
+          // Menangkap custom error dari smart contract (misal: "Sertifikat tidak ditemukan")
+          setErrorMessage(
+            revertError.reason || "Transaksi ditolak oleh Smart Contract.",
+          );
+        } else {
+          setErrorMessage(err.shortMessage || "Transaksi ditolak atau gagal.");
+        }
+      } else {
+        setErrorMessage(err.message || "Terjadi kesalahan sistem.");
+      }
+    }
   };
 
   return (
@@ -245,7 +350,7 @@ export default function AdminDashboard() {
           </div>
           {/* LEFT COLUMN: FORM CARD */}
           {activeTab === "transfer" && (
-            <form action="" onSubmit={handleTransferSubmit}>
+            <form action="" onSubmit={handleSubmitTransfer}>
               <div className="animate-fadeIn">
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold text-gray-800">
@@ -260,33 +365,74 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                   <InputField
                     label="NIB"
-                    name="nib"
+                    name="nibTransfer"
                     placeholder="Masukkan NIB"
-                    value={formData.nib}
+                    value={formData.nibTransfer}
                     onChange={handleInputChange}
                     required
                   />
                   <InputField
                     label="Nama Pemilik Baru"
-                    name="ownerName"
+                    name="newOwnerName"
                     placeholder="Masukkan nama pemilik baru"
-                    value={formData.ownerName}
+                    value={formData.newOwnerName}
                     onChange={handleInputChange}
                     required
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-blue-200"
-                >
-                  Submit Transfer ke Staging
-                </button>
+                <div className="space-y-4">
+                  {status !== "idle" && (
+                    <div
+                      className={`p-4 rounded-xl border flex items-center gap-4 ${status === "error" ? "bg-red-50 border-red-200 text-red-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}
+                    >
+                      {["signing", "mining"].includes(status) && (
+                        <Loader2 className="animate-spin" size={20} />
+                      )}
+                      {status === "success" && (
+                        <CheckCircle2 className="text-green-600" size={20} />
+                      )}
+                      {status === "error" && (
+                        <AlertCircle className="text-red-600" size={20} />
+                      )}
+                      <div>
+                        <p className="text-sm font-bold">
+                          {status === "signing" &&
+                            "Menunggu Tanda Tangan Wallet..."}
+                          {status === "mining" &&
+                            "Memvalidasi di Blockchain..."}
+                          {status === "success" &&
+                            "Permintaan Transfer Sertifikat Berhasil Masuk Staging!"}
+                          {status === "error" && "Transaksi Gagal"}
+                        </p>
+                        {status === "error" && (
+                          <p className="text-xs mt-1 opacity-80">
+                            {errorMessage}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={status !== "idle" && status !== "error"}
+                    className={`w-full py-3 rounded-lg font-bold transition-all ${
+                      status !== "idle" && status !== "error"
+                        ? "bg-slate-200 text-slate-500 cursor-not-allowed"
+                        : "bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-200"
+                    }`}
+                  >
+                    {status === "idle" || status === "error"
+                      ? "Submit Transfer ke Staging"
+                      : "Memproses..."}
+                  </button>
+                </div>
               </div>
             </form>
           )}
           {activeTab === "registration" && (
-            <form onSubmit={handleFormSubmit}>
+            <form onSubmit={handleSubmitRegister}>
               <h3 className="text-lg font-bold mb-1">
                 Inisiasi Sertifikat Baru
               </h3>
@@ -297,9 +443,9 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2 mb-2">
                 <InputField
                   label="Nomor Induk Bidang (NIB)"
-                  name="nib"
+                  name="nibRegister"
                   placeholder="Contoh: 10.15.22.05.1.12345"
-                  value={formData.nib}
+                  value={formData.nibRegister}
                   onChange={handleInputChange}
                   required
                 />
