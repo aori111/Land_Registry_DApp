@@ -44,9 +44,6 @@ export default function CertificateCard({
   const maxSigs = 3;
   const progressPercentage = (currentSigs / maxSigs) * 100;
 
-  // Generate ID unik untuk UI (Misal: ambil 4 digit terakhir NIB)
-  const displayId = `NIB: ${nib.slice(-4)}`;
-
   return (
     <div
       onClick={onClick}
@@ -69,22 +66,17 @@ export default function CertificateCard({
         <>
           {/* Baris 1: NIB & Signature Count */}
           <div className="flex justify-between items-center mb-2">
-            <span className="text-xs text-gray-500 font-mono tracking-tight">
-              NIB: {nib}
+            <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
+              {type === 0 ? "Registrasi Baru" : "Balik Nama / Transfer"}
             </span>
             <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-full">
               {currentSigs}/{maxSigs} Sigs
             </span>
           </div>
 
-          {/* Baris 2: Nama Parcel & Badge Tipe */}
-          <div className="flex items-center gap-2 mb-4">
-            <h4 className="font-bold text-[#1A1C1E] text-base">{displayId}</h4>
-            <span className="text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 px-1.5 py-0.5 rounded uppercase tracking-wider">
-              {type === 0 ? "Registrasi Baru" : "Balik Nama / Transfer"}
-            </span>
-          </div>
-
+          <h4 className="font-bold text-[#1A1C1E] text-base mb-4">
+            NIB: {nib}
+          </h4>
           {/* Baris 3: Progress Bar */}
           <div className="w-full bg-gray-100 h-1.5 rounded-full mb-2 overflow-hidden">
             <div

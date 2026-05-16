@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { Search, Info } from "lucide-react";
 import ExplorerCard from "@/src/components/ExplorerCard";
-import ApproveForm from "@/src/components/ApproveForm";
+import ApproveForm from "@/src/components/CertificateDetail";
 import { useAllCertificates } from "@/src/hooks/useAllCertificates";
 
 export default function CertificateExplorer() {

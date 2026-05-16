@@ -1,114 +1,102 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import { useState } from "react";
 
 import CertificateCard from "@/src/components/CertificateCard";
-import { useQuery } from "@tanstack/react-query";
 
-import ApproveForm from "@/src/components/ApproveForm";
+import CertificateDetail from "@/src/components/CertificateDetail";
 
-interface CertificateSubmitted {
-  action: number;
-  blocknumber: string;
-  nib: string;
-  requestIndex: string;
-  rindexerId: number;
-  txHash: string;
-  blockTimestamp: string;
-}
+import { CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 
-interface CertificateExecuted {
-  requestIndex: string;
-}
+import { GasEstimator } from "@/src/utils/ApproveGasEstimator";
 
-interface CertificateQueryResponse {
-  data: {
-    allRequestSubmitteds: {
-      nodes: CertificateSubmitted[];
-    };
-    allRequestExecuteds: {
-      nodes: CertificateExecuted[];
-    };
-  };
-}
-
-const GET_REGISTERED_CERTIFICATES = `
-query AllRequestSubmitteds {
-  allRequestSubmitteds {
-    nodes {
-      action
-      blockNumber
-      nib
-      requestIndex
-      rindexerId
-      txHash
-      blockTimestamp
-    }
-  }
-  allRequestExecuteds {
-    nodes {
-      requestIndex
-    }
-  }
-}
-`;
-
-async function fetchCertificates(): Promise<CertificateQueryResponse> {
-  const response = await fetch("/api/graphql", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      query: GET_REGISTERED_CERTIFICATES,
-      refetchOnWindowFocus: true,
-    }),
-  });
-  return response.json();
-}
-
-function usePendingRegistrations() {
-  const { data, isLoading, error } = useQuery<CertificateQueryResponse>({
-    queryKey: ["pending-certificates"],
-    queryFn: async () => {
-      return await fetchCertificates();
-    },
-  });
-
-  const pendingCertificates = useMemo(() => {
-    if (!data?.data) return [];
-
-    // 1. Ambil semua index yang sudah SELESAI (Executed)
-    const executedIds = new Set(
-      data.data.allRequestExecuteds.nodes.map((node) => node.requestIndex),
-    );
-
-    // 2. Filter RequestSubmitted
-    const filteredPending = data.data.allRequestSubmitteds.nodes.filter(
-      (request) => {
-        // Cek apakah sudah dieksekusi?
-        const isNotExecuted = !executedIds.has(request.requestIndex);
-
-        return isNotExecuted;
-      },
-    );
-
-    // 3. Mapping untuk UI dengan label tipe yang jelas
-    return filteredPending.map((cert) => ({
-      index: cert.requestIndex,
-      nib: cert.nib,
-      actionType: cert.action,
-      timestamp: cert.blockTimestamp,
-    }));
-  }, [data]);
-
-  return { pendingCertificates, isLoading, error };
-}
+import { useConfig, useWriteContract } from "wagmi";
+import { waitForTransactionReceipt } from "@wagmi/core";
+import { BaseError, ContractFunctionRevertedError } from "viem";
+import {
+  LAND_REGISTRY_ABI,
+  LAND_REGISTRY_ADDRESS,
+} from "@/src/constants/contracts";
+import { useQueryClient } from "@tanstack/react-query";
+import { usePendingCertificates } from "@/src/hooks/usePendingCertificates";
+import { useRequestDetail } from "@/src/hooks/useRequestDetails";
 
 export default function VerificationPage() {
   const [selectedId, setSelectedId] = useState("1");
-  const { isLoading, error, pendingCertificates } = usePendingRegistrations();
+  const { pendingCertificates } = usePendingCertificates();
+  const { requestDetail, refetch } = useRequestDetail(selectedId);
+
+  const config = useConfig();
+  const { writeContractAsync } = useWriteContract();
+
+  const [status, setStatus] = useState<
+    "idle" | "signing" | "mining" | "success" | "error"
+  >("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const queryClient = useQueryClient();
+
+  const handleApprove = async () => {
+    setStatus("signing");
+    setErrorMessage("");
+
+    try {
+      // 1. Trigger MetaMask untuk tanda tangan (Write Contract)
+      const txHash = await writeContractAsync({
+        address: LAND_REGISTRY_ADDRESS,
+        abi: LAND_REGISTRY_ABI,
+        functionName: "confirmRequest",
+        args: [BigInt(selectedId)],
+      });
+
+      setStatus("mining");
+
+      // 2. Tunggu konfirmasi block dari Anvil/Blockchain
+      const receipt = await waitForTransactionReceipt(config, {
+        hash: txHash,
+        confirmations: 1,
+      });
+
+      if (receipt.status === "reverted") {
+        throw new Error("Transaksi ditolak oleh Blockchain");
+      }
+
+      if (receipt.status === "success") {
+        // Tunggu 1-2 detik agar indexer punya waktu memproses
+        setTimeout(async () => {
+          // Ganti 'pending-certificates' sesuai query key di list kiri Anda
+          await queryClient.invalidateQueries({
+            queryKey: ["pending-certificates"],
+          });
+          await queryClient.invalidateQueries({
+            queryKey: ["all-certificates"],
+          });
+        }, 1500);
+      }
+
+      setStatus("success");
+      refetch();
+    } catch (err: any) {
+      setStatus("error");
+      console.error(err);
+
+      if (err instanceof BaseError) {
+        const revertError = err.walk(
+          (e) => e instanceof ContractFunctionRevertedError,
+        );
+        if (revertError instanceof ContractFunctionRevertedError) {
+          // Contoh penanganan error: "Sudah tanda tangan" atau "Bukan Authority"
+          setErrorMessage(
+            revertError.reason || "Transaksi digagalkan oleh contract",
+          );
+        } else {
+          setErrorMessage(err.shortMessage || "User membatalkan transaksi");
+        }
+      } else {
+        setErrorMessage(err.message || "Terjadi kesalahan");
+      }
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-[#F4F6FA]">
@@ -144,33 +132,89 @@ export default function VerificationPage() {
           </div>
 
           {/* Right: Detailed View */}
-          <ApproveForm requestIndex={selectedId} hideControls={false} />
+          <CertificateDetail requestDetail={requestDetail}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-sm font-bold">
+                {/* Ikon centang hijau jika sudah ada minimal 1 signature */}
+                <CheckCircle2
+                  size={18}
+                  className={
+                    requestDetail?.signatureCount &&
+                    requestDetail.signatureCount > 0
+                      ? "text-green-500"
+                      : "text-gray-400"
+                  }
+                />
+                {/* Menampilkan jumlah signature dinamis. Asumsi MAX_SIGS = 3 */}
+                <span>
+                  Signature {requestDetail?.signatureCount || 0} of 3 ready
+                </span>
+              </div>
+              <GasEstimator requestIndex={selectedId} />
+            </div>
+
+            <div className="space-y-4">
+              {status !== "idle" && (
+                <div
+                  className={`p-4 rounded-xl border flex items-center gap-4 ${status === "error" ? "bg-red-50 border-red-200 text-red-700" : "bg-blue-50 border-blue-200 text-blue-700"}`}
+                >
+                  {["signing", "mining"].includes(status) && (
+                    <Loader2 className="animate-spin" size={20} />
+                  )}
+                  {status === "success" && (
+                    <CheckCircle2 className="text-green-600" size={20} />
+                  )}
+                  {status === "error" && (
+                    <AlertCircle className="text-red-600" size={20} />
+                  )}
+                  <div>
+                    <p className="text-sm font-bold">
+                      {status === "signing" &&
+                        "Menunggu Tanda Tangan Wallet..."}
+                      {status === "mining" && "Memvalidasi di Blockchain..."}
+                      {status === "success" &&
+                        "Sertifikat Berhasil Diregistrasi!"}
+                      {status === "error" && "Transaksi Gagal"}
+                    </p>
+                    {status === "error" && (
+                      <p className="text-xs mt-1 opacity-80">{errorMessage}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={handleApprove}
+                disabled={
+                  status === "signing" ||
+                  status === "mining" ||
+                  requestDetail?.isExecuted ||
+                  !requestDetail // Disable juga jika data belum selesai dimuat
+                }
+                className={`w-full py-3 rounded-lg font-bold transition-all text-white ${
+                  (status !== "idle" && status !== "error") ||
+                  requestDetail?.isExecuted
+                    ? "bg-slate-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {/* Jika sudah dieksekusi, ubah teks tombolnya */}
+                {requestDetail?.isExecuted ? (
+                  "Telah Dieksekusi"
+                ) : (
+                  <>
+                    {status === "idle" && "Sign & Approve Registration"}
+                    {status === "signing" && "Menunggu Tanda Tangan Wallet..."}
+                    {status === "mining" && "Memvalidasi di Blockchain..."}
+                    {status === "success" && "Berhasil Disetujui!"}
+                    {status === "error" && "Coba Lagi"}
+                  </>
+                )}
+              </button>
+            </div>
+          </CertificateDetail>
         </div>
       </main>
-    </div>
-  );
-}
-
-// Sub-komponen Sidebar Item
-function NavItem({
-  icon,
-  label,
-  active = false,
-}: {
-  icon: any;
-  label: string;
-  active?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all cursor-pointer ${active ? "bg-white shadow-sm border border-gray-100 text-indigo-600" : "text-gray-500 hover:bg-gray-50"}`}
-    >
-      {icon}
-      <span
-        className={`text-sm font-semibold ${active ? "text-gray-900" : ""}`}
-      >
-        {label}
-      </span>
     </div>
   );
 }
